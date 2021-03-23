@@ -99,7 +99,7 @@ class DenseRetriever(object):
 
         query_tensor = torch.cat(query_vectors, dim=0)
 
-        logger.info("Total encoded queries tensor %s", query_tensor.size())
+        # logger.info("Total encoded queries tensor %s", query_tensor.size())
 
         assert query_tensor.size(0) == len(questions)
         return query_tensor
@@ -115,36 +115,8 @@ class DenseRetriever(object):
         """
         time0 = time.time()
         results = self.index.search_knn(query_vectors, top_docs)
-        logger.info("index search time: %f sec.", time.time() - time0)
+        # logger.info("index search time: %f sec.", time.time() - time0)
         return results
-
-
-def parse_qa_csv_file(location) -> Iterator[Tuple[str, List[str]]]:
-    with open(location) as ifile:
-        reader = csv.reader(ifile, delimiter="\t")
-        for row in reader:
-            question = row[0]
-            answers = eval(row[1])
-            yield question, answers
-
-
-def validate(
-    passages: Dict[object, Tuple[str, str]],
-    answers: List[List[str]],
-    result_ctx_ids: List[Tuple[List[object], List[float]]],
-    workers_num: int,
-    match_type: str,
-) -> List[List[bool]]:
-    match_stats = calculate_matches(
-        passages, answers, result_ctx_ids, workers_num, match_type
-    )
-    top_k_hits = match_stats.top_k_hits
-
-    logger.info("Validation results: top k documents hits %s", top_k_hits)
-    top_k_hits = [v / len(result_ctx_ids) for v in top_k_hits]
-    logger.info("Validation results: top k documents hits accuracy %s", top_k_hits)
-    return match_stats.questions_doc_hits
-
 
 def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
     docs = {}
@@ -171,59 +143,45 @@ def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
                     docs[row[0]] = (row[1], row[2])
     return docs
 
+def answer_clue(clue, max_answers):
+    questions = [clue]
+    questions_tensor = retriever.generate_question_vectors(questions)
 
-def save_results(
-    passages: Dict[object, Tuple[str, str]],
-    questions: List[str],
-    answers: List[List[str]],
-    top_passages_and_scores: List[Tuple[List[object], List[float]]],
-    per_question_hits: List[List[bool]],
-    out_file: str,
-):
-    # join passages text with the result ids, their questions and assigning has|no answer labels
-    merged_data = []
-    assert len(per_question_hits) == len(questions) == len(answers)
-    for i, q in enumerate(questions):
-        q_answers = answers[i]
-        results_and_scores = top_passages_and_scores[i]
-        hits = per_question_hits[i]
-        docs = [passages[doc_id] for doc_id in results_and_scores[0]]
-        scores = [str(score) for score in results_and_scores[1]]
-        ctxs_num = len(hits)
-
-        merged_data.append(
-            {
-                "question": q,
-                "answers": q_answers,
-                "ctxs": [
-                    {
-                        "id": results_and_scores[0][c],
-                        "title": docs[c][1],
-                        "text": docs[c][0],
-                        "score": scores[c],
-                        "has_answer": hits[c],
-                    }
-                    for c in range(ctxs_num)
-                ],
-            }
-        )
-
-    with open(out_file, "w") as writer:
-        writer.write(json.dumps(merged_data, indent=4) + "\n")
-    logger.info("Saved results * scores  to %s", out_file)
+    # get top k results
+    top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), max_answers)
+    answers = []
+    scores = []
+    for i in range(len(top_ids_and_scores[0][0])):
+        id_ = top_ids_and_scores[0][0][i]
+        score = top_ids_and_scores[0][1][i]
+        passage = all_passages[id_]
+        answers.append(passage[1])
+        scores.append(score)
+    return answers, scores
 
 
-def iterate_encoded_files(vector_files: list) -> Iterator[Tuple[object, np.array]]:
-    for i, file in enumerate(vector_files):
-        logger.info("Reading file %s", file)
-        with open(file, "rb") as reader:
-            doc_vectors = pickle.load(reader)
-            for doc in doc_vectors:
-                db_id, doc_vector = doc
-                yield db_id, doc_vector
+retriever = None
+all_passages = None
 
+def setup_dpr(model_file, ctx_file, encoded_ctx_file, hnsw_index=False, save_or_load_index=False):
+    global retriever
+    global all_passages
+    parser = argparse.ArgumentParser()
+    add_encoder_params(parser)
+    add_tokenizer_params(parser)
+    add_cuda_params(parser)
 
-def main(args):
+    args = parser.parse_args()
+    args.model_file = model_file
+    args.ctx_file = ctx_file
+    args.encoded_ctx_file = encoded_ctx_file
+    args.hnsw_index = hnsw_index
+    args.save_or_load_index = save_or_load_index
+    args.batch_size = 1 # TODO
+
+    setup_args_gpu(args)
+    print_args(args)
+
     saved_state = load_states_from_checkpoint(args.model_file)
     set_encoder_params_from_state(saved_state.encoder_params, args)
 
@@ -253,9 +211,9 @@ def main(args):
     logger.info("Encoder vector_size=%d", vector_size)
 
     if args.hnsw_index:
-        index = DenseHNSWFlatIndexer(vector_size, args.index_buffer)
+        index = DenseHNSWFlatIndexer(vector_size, 50000)
     else:
-        index = DenseFlatIndexer(vector_size, args.index_buffer)
+        index = DenseFlatIndexer(vector_size, 50000)
 
     retriever = DenseRetriever(encoder, args.batch_size, tensorizer, index)
 
@@ -274,109 +232,7 @@ def main(args):
 
         if args.save_or_load_index:
             retriever.index.serialize(index_path)
-    # get questions & answers
+        # get questions & answers
     
     all_passages = load_passages(args.ctx_file)
-    
-    while True:
-        questions = [input("Enter a clue: ")]
-        flen = int(input("Length: ").strip())
-        true_answer=input("True Answer: ").strip()
-    
-        questions_tensor = retriever.generate_question_vectors(questions)
 
-        # get top k results
-        top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), args.n_docs)
-        for i in range(len(top_ids_and_scores[0][0])):
-            if i > 200:
-                continue 
-            id_ = top_ids_and_scores[0][0][i]
-            if all_passages[id_][1].strip().lower() == true_answer:
-                print(f"True answer found at {i}th rank")
-            score = top_ids_and_scores[0][1][i]
-            passage = all_passages[id_]
-            if len(passage[1].strip()) == flen:
-                print(f"{i}. Passage {id_}, score {score}")
-                print("| ", passage[1])
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    add_encoder_params(parser)
-    add_tokenizer_params(parser)
-    add_cuda_params(parser)
-
-    parser.add_argument(
-        "--qa_file",
-        required=True,
-        type=str,
-        default=None,
-        help="Question and answers file of the format: question \\t ['answer1','answer2', ...]",
-    )
-    parser.add_argument(
-        "--ctx_file",
-        required=True,
-        type=str,
-        default=None,
-        help="All passages file in the tsv format: id \\t passage_text \\t title",
-    )
-    parser.add_argument(
-        "--encoded_ctx_file",
-        type=str,
-        default=None,
-        help="Glob path to encoded passages (from generate_dense_embeddings tool)",
-    )
-    parser.add_argument(
-        "--out_file",
-        type=str,
-        default=None,
-        help="output .tsv file path to write results to ",
-    )
-    parser.add_argument(
-        "--match",
-        type=str,
-        default="string",
-        choices=["regex", "string"],
-        help="Answer matching logic type",
-    )
-    parser.add_argument(
-        "--n-docs", type=int, default=200, help="Amount of top docs to return"
-    )
-    parser.add_argument(
-        "--validation_workers",
-        type=int,
-        default=16,
-        help="Number of parallel processes to validate results",
-    )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=32,
-        help="Batch size for question encoder forward pass",
-    )
-    parser.add_argument(
-        "--index_buffer",
-        type=int,
-        default=50000,
-        help="Temporal memory data buffer size (in samples) for indexer",
-    )
-    parser.add_argument(
-        "--hnsw_index",
-        action="store_true",
-        help="If enabled, use inference time efficient HNSW index",
-    )
-    parser.add_argument(
-        "--save_or_load_index", action="store_true", help="If enabled, save index"
-    )
-
-    args = parser.parse_args()
-
-    assert (
-        args.model_file
-    ), "Please specify --model_file checkpoint to init model weights"
-
-    setup_args_gpu(args)
-    print_args(args)
-    main(args)

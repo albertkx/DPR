@@ -694,7 +694,7 @@ def main():
     parser.add_argument(
         "--global_loss_buf_sz",
         type=int,
-        default=150000,
+        default=1500000,
         help='Buffer size for distributed mode representations al gather operation. \
                                 Increase this if you see errors like "encoded data exceeds max_size ..."',
     )
