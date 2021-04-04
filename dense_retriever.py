@@ -124,7 +124,7 @@ def parse_qa_csv_file(location) -> Iterator[Tuple[str, List[str]]]:
         reader = csv.reader(ifile, delimiter="\t")
         for row in reader:
             question = row[0]
-            answers = eval(row[1])
+            answers = [row[1]]
             yield question, answers
 
 
@@ -262,7 +262,6 @@ def main(args):
     # index all passages
     ctx_files_pattern = args.encoded_ctx_file
     input_paths = glob.glob(ctx_files_pattern)
-
     index_path = "_".join(input_paths[0].split("_")[:-1])
     if args.save_or_load_index and (
         os.path.exists(index_path) or os.path.exists(index_path + ".index.dpr")
@@ -286,7 +285,7 @@ def main(args):
     questions_tensor = retriever.generate_question_vectors(questions)
 
     # get top k results
-    top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), args.n_docs)
+    top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), 300 * args.n_docs)
 
     all_passages = load_passages(args.ctx_file)
 
@@ -294,6 +293,25 @@ def main(args):
         raise RuntimeError(
             "No passages data found. Please specify ctx_file param properly."
         )
+
+    # filter answer length
+    for batch_id in range(len(top_ids_and_scores)):
+        if batch_id % 100 == 0:
+            print('batch', batch_id)
+        answer = question_answers[batch_id][0]
+        answers_found = 0
+        ids_scores_list = top_ids_and_scores[batch_id]
+        for id_index, id_ in enumerate(list(ids_scores_list[0])):
+            if len(all_passages[id_][1]) != len(answer):
+                top_ids_and_scores[batch_id][0][id_index] = -1000
+                top_ids_and_scores[batch_id][1][id_index] = -1000
+            else:
+                answers_found += 1
+            if answers_found == args.n_docs:
+                break
+        top_ids_and_scores[batch_id] = ([x for x in top_ids_and_scores[batch_id][0] if x != -1000][0:args.n_docs], [t for t in top_ids_and_scores[batch_id][1] if t != -1000][0:args.n_docs])
+        if len(top_ids_and_scores[batch_id][0]) != args.n_docs:
+            print(len(top_ids_and_scores[batch_id][0]))
 
     questions_doc_hits = validate(
         all_passages,
