@@ -109,6 +109,16 @@ class BiEncoder(nn.Module):
         ctx_attn_mask: T,
     ) -> Tuple[T, T]:
 
+        #from transformers import AutoTokenizer
+        #tok = AutoTokenizer.from_pretrained('roberta-large')
+        #str_ =  tok.decode(question_ids[0])
+        #assert str_.lower() == str_
+        #print(tok.decode(question_ids[1]))
+        #print(tok.decode(question_ids[2]))
+        #print(tok.decode(context_ids[0]))
+        #print(tok.decode(context_ids[1]))
+        #print(tok.decode(context_ids[2]))
+        #import pdb; pdb.set_trace()
         _q_seq, q_pooled_out, _q_hidden = self.get_representation(
             self.question_model,
             question_ids,
@@ -136,6 +146,8 @@ class BiEncoder(nn.Module):
         num_other_negatives: int = 0,
         shuffle: bool = True,
         shuffle_positives: bool = False,
+        do_lower_fill: bool = False,
+        desegment_valid_fill: bool =False
     ) -> BiEncoderBatch:
         """
         Creates a batch of the biencoder training tuple.
@@ -161,9 +173,12 @@ class BiEncoder(nn.Module):
                 positive_ctx = positive_ctxs[np.random.choice(len(positive_ctxs))]
             else:
                 positive_ctx = sample["positive_ctxs"][0]
-
+            if do_lower_fill:
+                positive_ctx["text"] = positive_ctx["text"].lower()
             neg_ctxs = sample["negative_ctxs"]
             hard_neg_ctxs = sample["hard_negative_ctxs"]
+            if do_lower_fill:
+                neg_ctxs, hard_neg_ctxs = list(map(lambda x: {"text": x["text"].lower(), "title": x["title"]}, neg_ctxs)), list(map(lambda x: {"text": x["text"].lower(), "title": x["title"]}, hard_neg_ctxs))
             question = normalize_question(sample["question"])
 
             if shuffle:

@@ -9,6 +9,14 @@
  Command line tool to get dense results and validate them
 """
 
+import hashlib
+import random
+import string
+import sys
+sys.path.append('../.')
+sys.path.append('./')
+#import t5
+
 import argparse
 import os
 import csv
@@ -143,29 +151,64 @@ def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
                     docs[row[0]] = (row[1], row[2])
     return docs
 
-def answer_clue(clue, max_answers):
+def answer_clue(clue, max_answers, answer_length):
+    if clue + str(max_answers) + str(answer_length) in answer_cache:
+        return answer_cache[clue + str(max_answers) + str(answer_length)]
+
     questions = [clue]
     questions_tensor = retriever.generate_question_vectors(questions)
 
     # get top k results
-    top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), max_answers)
+    top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), 300 * max_answers) # 300 so we make sure we find the right length
+
     answers = []
     scores = []
     for i in range(len(top_ids_and_scores[0][0])):
         id_ = top_ids_and_scores[0][0][i]
         score = top_ids_and_scores[0][1][i]
         passage = all_passages[id_]
-        answers.append(passage[1])
-        scores.append(score)
+        ans = passage[1]
+        ans = ''.join([a.upper() for a in ans if a.upper() in string.ascii_uppercase])
+        if len(ans) == answer_length and ans not in answers: # ans not in answers is because the segmented data can ocasionally have duplicates
+            answers.append(ans)
+            scores.append(score)
+            if len(answers) == max_answers:
+                break
+    
+    #if '___' in clue:
+    #    mlm_num_answers = min(100, int(max_answers/2)) # TODO, figure out how many to add
+    #    mlm_answers = t5.answer_clue(clue, mlm_num_answers)
+    #    mlm_answers = [a for a in mlm_answers if len(a) == answer_length]
+    #    mlm_answers = [a for a in mlm_answers if a not in answers] # TODO, weird edge case where you dedup from here but then it gets delete when you slice on answers
+    #    mlm_num_answers = min(mlm_num_answers, len(mlm_answers)) # sometimes this function doesnt return enough candidates
+    #    answers = answers[0:max_answers-mlm_num_answers]
+    #    scores = scores[0:max_answers-mlm_num_answers]
+    #    answers = answers + mlm_answers
+    #    scores = scores + [0] * len(mlm_answers) # TODO, what score to give them?
+
+    answer_cache[clue + str(max_answers) + str(answer_length)] = (answers, scores)
+    if random.random() > 0.97:
+        with open(answer_cache_path, 'wb') as f:
+            pickle.dump(answer_cache, f)
+
     return answers, scores
 
 
 retriever = None
 all_passages = None
-
+answer_cache = None
+answer_cache_path = None
 def setup_dpr(model_file, ctx_file, encoded_ctx_file, hnsw_index=False, save_or_load_index=False):
     global retriever
     global all_passages
+    global answer_cache
+    global answer_cache_path
+    parameter_setting = model_file + ctx_file + encoded_ctx_file
+    answer_cache_path = hashlib.sha1(parameter_setting.encode("utf-8")).hexdigest()
+    if os.path.exists(answer_cache_path):
+        answer_cache = pickle.load(open(answer_cache_path, 'rb'))
+    else:
+        answer_cache = {}
     parser = argparse.ArgumentParser()
     add_encoder_params(parser)
     add_tokenizer_params(parser)

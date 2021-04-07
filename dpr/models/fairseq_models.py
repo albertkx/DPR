@@ -57,4 +57,4 @@ class RobertaEncoder(nn.Module):
         return roberta_out, cls_out, None
 
     def get_out_size(self):
-        raise NotImplementedError
+        return self.fairseq_roberta.model.encoder.lm_head.dense.weight.shape[1]

@@ -68,6 +68,16 @@ def add_encoder_params(parser: argparse.ArgumentParser):
         default=512,
         help="Max length of the encoder input sequence",
     )
+    parser.add_argument(
+        "--do_fill_lower_case",
+        action="store_true",
+        help="Make all fills lower case. e.g. for cased models such as roberta"
+    )
+    parser.add_argument(
+        "--desegment_valid_fill",
+        action="store_true",
+        help="Desegment model fill output for validation"
+    )
 
 
 def add_training_params(parser: argparse.ArgumentParser):

@@ -226,6 +226,8 @@ class BiEncoderTrainer(object):
                 num_hard_negatives,
                 num_other_negatives,
                 shuffle=False,
+                do_lower_fill=args.do_fill_lower_case,
+                desegment_valid_fill=args.desegment_valid_fill
             )
 
             loss, correct_cnt = _do_biencoder_fwd_pass(
@@ -297,6 +299,8 @@ class BiEncoderTrainer(object):
                 num_hard_negatives,
                 num_other_negatives,
                 shuffle=False,
+                do_lower_fill=args.do_fill_lower_case,
+                desegment_valid_fill=args.desegment_valid_fill
             )
             total_ctxs = len(ctx_represenations)
             ctxs_ids = biencoder_input.context_ids
@@ -426,6 +430,8 @@ class BiEncoderTrainer(object):
                 num_other_negatives,
                 shuffle=True,
                 shuffle_positives=args.shuffle_positive_ctx,
+                do_lower_fill=args.do_fill_lower_case,
+                desegment_valid_fill=args.desegment_valid_fill
             )
 
             loss, correct_cnt = _do_biencoder_fwd_pass(
@@ -766,6 +772,12 @@ def main():
         default="dpr_biencoder",
         help="Checkpoints file prefix",
     )
+    #parser.add_argument(
+    #    "--adam_epsilon",
+    #    type=int,
+    #    default=1e-8,
+    #    help="Adam Epsilon",
+    #)
 
     args = parser.parse_args()
 

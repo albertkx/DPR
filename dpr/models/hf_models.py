@@ -17,6 +17,7 @@ from torch import Tensor as T
 from torch import nn
 from transformers.modeling_bert import BertConfig, BertModel
 from transformers.modeling_electra import ElectraConfig, ElectraModel
+from transformers.modeling_roberta import RobertaConfig, RobertaModel
 from transformers.optimization import AdamW
 from transformers.tokenization_bert import BertTokenizer
 from transformers.tokenization_roberta import RobertaTokenizer
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
 def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
     dropout = args.dropout if hasattr(args, "dropout") else 0.0
     question_encoder = HFBertEncoder.init_encoder(
@@ -64,6 +66,43 @@ def get_bert_biencoder_components(args, inference_only: bool = False, **kwargs):
     )
 
     tensorizer = get_bert_tensorizer(args)
+
+    return tensorizer, biencoder, optimizer
+
+def get_roberta_biencoder_components(args, inference_only: bool = False, **kwargs):
+    dropout = args.dropout if hasattr(args, "dropout") else 0.0
+    question_encoder = HFRobertaEncoder.init_encoder(
+        args.pretrained_model_cfg,
+        projection_dim=args.projection_dim,
+        dropout=dropout,
+        **kwargs
+    )
+    ctx_encoder = HFRobertaEncoder.init_encoder(
+        args.pretrained_model_cfg,
+        projection_dim=args.projection_dim,
+        dropout=dropout,
+        **kwargs
+    )
+
+    fix_ctx_encoder = (
+        args.fix_ctx_encoder if hasattr(args, "fix_ctx_encoder") else False
+    )
+    biencoder = BiEncoder(
+        question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder
+    )
+
+    optimizer = (
+        get_optimizer(
+            biencoder,
+            learning_rate=args.learning_rate,
+            adam_eps=args.adam_eps,
+            weight_decay=args.weight_decay,
+        )
+        if not inference_only
+        else None
+    )
+
+    tensorizer = get_roberta_tensorizer(args)
 
     return tensorizer, biencoder, optimizer
 
@@ -246,6 +285,55 @@ class HFBertEncoder(BertModel):
             return self.encode_proj.out_features
         return self.config.hidden_size
 
+class HFRobertaEncoder(RobertaModel):
+    def __init__(self, config, project_dim: int = 0):
+        RobertaModel.__init__(self, config)
+        assert config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        self.encode_proj = (
+            nn.Linear(config.hidden_size, project_dim) if project_dim != 0 else None
+        )
+        self.init_weights()
+
+    @classmethod
+    def init_encoder(
+        cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, **kwargs
+    ) -> RobertaModel:
+        cfg = RobertaConfig.from_pretrained(cfg_name if cfg_name else "roberta-large")
+        if dropout != 0:
+            cfg.attention_probs_dropout_prob = dropout
+            cfg.hidden_dropout_prob = dropout
+        return cls.from_pretrained(
+            cfg_name, config=cfg, project_dim=projection_dim, **kwargs
+        )
+
+    def forward(
+        self, input_ids: T, token_type_ids: T, attention_mask: T
+    ) -> Tuple[T, ...]:
+        if self.config.output_hidden_states:
+            sequence_output, pooled_output, hidden_states = super().forward(
+                input_ids=input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+            )
+        else:
+            hidden_states = None
+            sequence_output, pooled_output = super().forward(
+                input_ids=input_ids,
+                token_type_ids=token_type_ids,
+                attention_mask=attention_mask,
+            )
+
+        pooled_output = sequence_output[:, 0, :]
+        if self.encode_proj:
+            pooled_output = self.encode_proj(pooled_output)
+        return sequence_output, pooled_output, hidden_states
+
+    def get_out_size(self):
+        if self.encode_proj:
+            return self.encode_proj.out_features
+        return self.config.hidden_size
+
+
 class HFElectraEncoder(ElectraModel):
     def __init__(self, config, project_dim: int = 0):
         ElectraModel.__init__(self, config)
@@ -292,6 +380,25 @@ class HFElectraEncoder(ElectraModel):
         if self.encode_proj:
             pooled_output = self.encode_proj(pooled_output)
         return sequence_output, pooled_output, hidden_states
+       # if self.config.output_hidden_states:
+       #     sequence_output, pooled_output, hidden_states = super().forward(
+       #         input_ids=input_ids,
+       #         token_type_ids=token_type_ids,
+       #         attention_mask=attention_mask,
+       #     )
+       # else:
+       #     hidden_states = None
+       #     sequence_output, pooled_output = super().forward(
+       #         input_ids=input_ids,
+       #         token_type_ids=token_type_ids,
+       #         attention_mask=attention_mask,
+       #     )
+
+        #pooled_output = sequence_output[:, 0, :]
+        #if self.encode_proj:
+        #    pooled_output = self.encode_proj(pooled_output)
+        #return sequence_output, pooled_output, hidden_states
+
 
     def get_out_size(self):
         if self.encode_proj:

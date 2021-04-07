@@ -89,7 +89,8 @@ def check_answer(questions_answers_docs, tokenizer, match_type) -> List[bool]:
 
     for i, doc_id in enumerate(doc_ids):
         doc = dpr_all_documents[doc_id]
-        text = doc[0] + doc[1]# TODO: Change back to 0 later.
+        # text = doc[0] + doc[1]# TODO: Change back to 0 later.
+        text = doc[1]
 
         answer_found = False
         if text is None:  # cannot find the document for some reason

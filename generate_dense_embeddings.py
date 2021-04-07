@@ -94,6 +94,10 @@ def gen_ctx_vectors(
 def main(args):
     saved_state = load_states_from_checkpoint(args.model_file)
     set_encoder_params_from_state(saved_state.encoder_params, args)
+    
+    if args.do_lower_case == False: # there is only fills in this part. so we can just set lowercasing based on that
+        args.do_lower_case = args.do_fill_lower_case
+
     print_args(args)
 
     tensorizer, encoder, _ = init_biencoder_components(

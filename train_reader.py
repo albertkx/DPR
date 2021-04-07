@@ -661,7 +661,7 @@ def main():
     )
     parser.add_argument(
         "--max_answer_length",
-        default=10,
+        default=3,
         type=int,
         help="The maximum length of an answer that can be generated. This is needed because the start "
         "and end predictions are not conditioned on one another.",
