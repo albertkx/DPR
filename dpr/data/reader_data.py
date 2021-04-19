@@ -301,6 +301,7 @@ def get_best_spans(
             scores.append(((i, i + j), s + e))
 
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
+    
 
     chosen_span_intervals = []
     best_spans = []
@@ -324,7 +325,7 @@ def get_best_spans(
             tensorizer, ctx_ids, (start_index, end_index)
         )
 
-        predicted_answer = tensorizer.to_string(ctx_ids[start_index : end_index + 1])
+        predicted_answer = tensorizer.to_string(ctx_ids[start_index : end_index + 1]).upper()
         best_spans.append(
             SpanPrediction(
                 predicted_answer, score, relevance_score, passage_idx, ctx_ids
