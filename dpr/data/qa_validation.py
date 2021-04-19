@@ -88,6 +88,7 @@ def check_answer(questions_answers_docs, tokenizer, match_type) -> List[bool]:
     hits = []
 
     for i, doc_id in enumerate(doc_ids):
+        doc_id = doc_id.replace('wiki:','')
         doc = dpr_all_documents[doc_id]
         # text = doc[0] + doc[1]# TODO: Change back to 0 later.
         text = doc[1]
