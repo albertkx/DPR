@@ -18,6 +18,8 @@ import pickle
 from functools import partial
 from typing import Tuple, List, Dict, Iterable, Optional
 
+import string
+import scipy
 import torch
 from torch import Tensor as T
 from tqdm import tqdm
@@ -296,9 +298,11 @@ def get_best_spans(
     Finds the best answer span for the extractive Q&A model
     """
     scores = []
+    start_logits = scipy.special.softmax(start_logits)
+    end_logits = scipy.special.softmax(end_logits)
     for (i, s) in enumerate(start_logits):
         for (j, e) in enumerate(end_logits[i : i + max_answer_length]):
-            scores.append(((i, i + j), s + e))
+            scores.append(((i, i + j), s * e))
 
     scores = sorted(scores, key=lambda x: x[1], reverse=True)
     
@@ -326,9 +330,17 @@ def get_best_spans(
         )
 
         predicted_answer = tensorizer.to_string(ctx_ids[start_index : end_index + 1]).upper()
+        predicted_answer = ''.join([r.upper() for r in predicted_answer if r.upper() in string.ascii_uppercase])
+
+        # just turn score into the merged score already
+        score = score
+        #######score = score * relevance_score
+        temp_relevance_score = -999999
+        #
+
         best_spans.append(
             SpanPrediction(
-                predicted_answer, score, relevance_score, passage_idx, ctx_ids
+                predicted_answer, score, temp_relevance_score, passage_idx, ctx_ids
             )
         )
         chosen_span_intervals.append((start_index, end_index))
