@@ -231,7 +231,7 @@ class ReaderTrainer(object):
                 start_logits, end_logits, relevance_logits = self.reader(
                     input.input_ids, attn_mask
                 )
-
+            
             batch_predictions = self._get_best_prediction(
                 start_logits,
                 end_logits,
@@ -247,6 +247,7 @@ class ReaderTrainer(object):
 
         ems = defaultdict(list)
 
+        #import pdb; pdb.set_trace()
         for q_predictions in all_results:
             gold_answers = q_predictions.gold_answers
             span_predictions = (
@@ -428,7 +429,7 @@ class ReaderTrainer(object):
     ) -> List[ReaderQuestionPredictions]:
 
         args = self.args
-        max_answer_length = args.max_answer_length
+        max_answer_length = None#args.max_answer_length
         questions_num, passages_per_question = relevance_logits.size()
 
         _, idxs = torch.sort(
@@ -436,8 +437,12 @@ class ReaderTrainer(object):
             dim=1,
             descending=True,
         )
-
+        
         batch_results = []
+        #batch_results = [idx for idx in idxs]
+        #return batch_results 
+    ########
+    ####
         for q in range(questions_num):
             sample = samples_batch[q]
 
@@ -450,30 +455,33 @@ class ReaderTrainer(object):
                 ):  # empty passage selected, skip
                     continue
                 reader_passage = sample.passages[passage_idx]
-                sequence_ids = reader_passage.sequence_ids
-                sequence_len = sequence_ids.size(0)
+                tokens = self.tensorizer.tokenizer.decode(reader_passage.sequence_ids).split("[SEP]")[1].strip()
+                #sequence_ids = reader_passage.sequence_ids
+                #sequence_len = sequence_ids.size(0)
                 # assuming question & title information is at the beginning of the sequence
-                passage_offset = reader_passage.passage_offset
+                #passage_offset = reader_passage.passage_offset
 
-                p_start_logits = start_logits[q, passage_idx].tolist()[
-                    passage_offset:sequence_len
-                ]
-                p_end_logits = end_logits[q, passage_idx].tolist()[
-                    passage_offset:sequence_len
-                ]
+                #p_start_logits = start_logits[q, passage_idx].tolist()[
+                #    passage_offset:sequence_len
+                #]
+                #p_end_logits = end_logits[q, passage_idx].tolist()[
+                #    passage_offset:sequence_len
+                #]
 
-                ctx_ids = sequence_ids.tolist()[passage_offset:]
-                best_spans = get_best_spans(
-                    self.tensorizer,
-                    p_start_logits,
-                    p_end_logits,
-                    ctx_ids,
-                    max_answer_length,
-                    passage_idx,
-                    relevance_logits[q, passage_idx].item(),
-                    top_spans=10,
-                )
-                nbest.extend(best_spans)
+                #ctx_ids = sequence_ids.tolist()[passage_offset:]
+                #best_spans = get_best_spans(
+                #    self.tensorizer,
+                #    p_start_logits,
+                #    p_end_logits,
+                #    ctx_ids,
+                #    max_answer_length,
+                #    passage_idx,
+                #    relevance_logits[q, passage_idx].item(),
+                #    top_spans=10,
+                #)
+                #nbest.extend(best_spans)
+                pred = SpanPrediction(tokens, relevance_logits[q, passage_idx].item(), -1, passage_idx, None)
+                nbest.append(pred)
                 if len(nbest) > 0 and not passage_thresholds:
                     break
 
@@ -643,7 +651,7 @@ def main():
     # reader specific params
     parser.add_argument(
         "--max_n_answers",
-        default=10,
+        default=-9999,
         type=int,
         help="Max amount of answer spans to marginalize per singe passage",
     )
@@ -659,13 +667,13 @@ def main():
         default=50,
         help="Total amount of positive and negative passages per question for evaluation",
     )
-    parser.add_argument(
-        "--max_answer_length",
-        default=3,
-        type=int,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
-    )
+    #parser.add_argument(
+    #    "--max_answer_length",
+    #    default=3,
+    #    type=int,
+    #    help="The maximum length of an answer that can be generated. This is needed because the start "
+    #    "and end predictions are not conditioned on one another.",
+    #)
     parser.add_argument(
         "--eval_top_docs",
         nargs="+",

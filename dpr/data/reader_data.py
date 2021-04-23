@@ -176,9 +176,10 @@ def preprocess_retriever_data(
         sample.passage_offset = shift
         assert shift > 1
         if sample.has_answer and is_train_set:
-            sample.answers_spans = [
-                (span[0] + shift, span[1] + shift) for span in sample.answers_spans
-            ]
+            sample.answers_spans = None
+            #sample.answers_spans = [
+            #    (span[0] + shift, span[1] + shift) for span in sample.answers_spans
+            #]
         return sample
 
     for sample in samples:
@@ -384,26 +385,27 @@ def _select_reader_passages(
                     ctx.passage_text, add_special_tokens=False
                 )
 
-            answer_spans = [
-                _find_answer_positions(ctx.passage_token_ids, answers_token_ids[i])
-                for i in range(len(answers))
-            ]
+            #answer_spans = [
+            #    _find_answer_positions(ctx.passage_token_ids, answers_token_ids[i])
+            #    for i in range(len(answers))
+            #]
 
             # flatten spans list
-            answer_spans = [item for sublist in answer_spans for item in sublist]
-            answers_spans = list(filter(None, answer_spans))
-            ctx.answers_spans = answers_spans
+            #answer_spans = [item for sublist in answer_spans for item in sublist]
+            #answers_spans = list(filter(None, answer_spans))
+            #ctx.answers_spans = answers_spans
+            ctx.answers_span = None
 
-            if not answers_spans:
-                logger.warning(
-                    "No answer found in passage id=%s text=%s, answers=%s, question=%s",
-                    ctx.id,
-                    ctx.passage_text,
-                    answers,
-                    question,
-                )
+            #if not answers_spans:
+            #    logger.warning(
+            #        "No answer found in passage id=%s text=%s, answers=%s, question=%s",
+            #        ctx.id,
+            #        ctx.passage_text,
+            #        answers,
+            #        question,
+            #    )
 
-            ctx.has_answer = bool(answers_spans)
+            #ctx.has_answer = bool(answers_spans)
 
         return ctx
 

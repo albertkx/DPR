@@ -540,7 +540,7 @@ class BiEncoderTrainer(object):
         model_to_load = get_model_obj(self.biencoder)
         logger.info("Loading saved model state ...")
         model_to_load.load_state_dict(
-            saved_state.model_dict
+            saved_state.model_dict, strict=False
         )  # set strict=False if you use extra projection
 
         if saved_state.optimizer_dict:

@@ -59,19 +59,19 @@ class Reader(nn.Module):
 
 
 def compute_loss(start_positions, end_positions, answer_mask, start_logits, end_logits, relevance_logits, N, M):
-    start_positions = start_positions.view(N * M, -1)
-    end_positions = end_positions.view(N * M, -1)
-    answer_mask = answer_mask.view(N * M, -1)
+    #start_positions = start_positions.view(N * M, -1)
+    #end_positions = end_positions.view(N * M, -1)
+    #answer_mask = answer_mask.view(N * M, -1)
 
-    start_logits = start_logits.view(N * M, -1)
-    end_logits = end_logits.view(N * M, -1)
+    #start_logits = start_logits.view(N * M, -1)
+    #end_logits = end_logits.view(N * M, -1)
     relevance_logits = relevance_logits.view(N * M)
 
-    answer_mask = answer_mask.type(torch.FloatTensor).cuda()
+    #answer_mask = answer_mask.type(torch.FloatTensor).cuda()
 
     ignored_index = start_logits.size(1)
-    start_positions.clamp_(0, ignored_index)
-    end_positions.clamp_(0, ignored_index)
+    #start_positions.clamp_(0, ignored_index)
+    #end_positions.clamp_(0, ignored_index)
     loss_fct = CrossEntropyLoss(reduce=False, ignore_index=ignored_index)
 
     # compute switch loss
@@ -80,19 +80,20 @@ def compute_loss(start_positions, end_positions, answer_mask, start_logits, end_
     switch_loss = torch.sum(loss_fct(relevance_logits, switch_labels))
 
     # compute span loss
-    start_losses = [(loss_fct(start_logits, _start_positions) * _span_mask)
-                    for (_start_positions, _span_mask)
-                    in zip(torch.unbind(start_positions, dim=1), torch.unbind(answer_mask, dim=1))]
+    #start_losses = [(loss_fct(start_logits, _start_positions) * _span_mask)
+    #                for (_start_positions, _span_mask)
+    #                in zip(torch.unbind(start_positions, dim=1), torch.unbind(answer_mask, dim=1))]
 
-    end_losses = [(loss_fct(end_logits, _end_positions) * _span_mask)
-                  for (_end_positions, _span_mask)
-                  in zip(torch.unbind(end_positions, dim=1), torch.unbind(answer_mask, dim=1))]
-    loss_tensor = torch.cat([t.unsqueeze(1) for t in start_losses], dim=1) + \
-                  torch.cat([t.unsqueeze(1) for t in end_losses], dim=1)
+    #end_losses = [(loss_fct(end_logits, _end_positions) * _span_mask)
+    #              for (_end_positions, _span_mask)
+    #              in zip(torch.unbind(end_positions, dim=1), torch.unbind(answer_mask, dim=1))]
+    #loss_tensor = torch.cat([t.unsqueeze(1) for t in start_losses], dim=1) + \
+    #              torch.cat([t.unsqueeze(1) for t in end_losses], dim=1)
 
-    loss_tensor = loss_tensor.view(N, M, -1).max(dim=1)[0]
-    span_loss = _calc_mml(loss_tensor)
-    return span_loss + switch_loss
+    #loss_tensor = loss_tensor.view(N, M, -1).max(dim=1)[0]
+    #span_loss = _calc_mml(loss_tensor)
+    #return span_loss + switch_loss
+    return switch_loss
 
 
 def create_reader_input(pad_token_id: int,
@@ -137,18 +138,18 @@ def create_reader_input(pad_token_id: int,
             continue
         sample_input_ids, starts_tensor, ends_tensor, answer_mask = sample_tensors
         input_ids.append(sample_input_ids)
-        if is_train:
-            start_positions.append(starts_tensor)
-            end_positions.append(ends_tensor)
-            answers_masks.append(answer_mask)
+        #if is_train:
+        #    start_positions.append(starts_tensor)
+        #    end_positions.append(ends_tensor)
+        #    answers_masks.append(answer_mask)
     input_ids = torch.cat([ids.unsqueeze(0) for ids in input_ids], dim=0)
 
-    if is_train:
-        start_positions = torch.stack(start_positions, dim=0)
-        end_positions = torch.stack(end_positions, dim=0)
-        answers_masks = torch.stack(answers_masks, dim=0)
+    #if is_train:
+    #    start_positions = torch.stack(start_positions, dim=0)
+    #    end_positions = torch.stack(end_positions, dim=0)
+    #    answers_masks = torch.stack(answers_masks, dim=0)
 
-    return ReaderBatch(input_ids, start_positions, end_positions, answers_masks)
+    return ReaderBatch(input_ids, None, None, None)#start_positions, end_positions, answers_masks)
 
 
 def _calc_mml(loss_tensor):
@@ -174,10 +175,10 @@ def _get_positive_idx(positives: List[ReaderPassage], max_len: int, is_random: b
     # select just one positive
     positive_idx = np.random.choice(len(positives)) if is_random else 0
 
-    if not _get_answer_spans(positive_idx, positives, max_len):
-        # question may be too long, find the first positive with at least one valid span
-        positive_idx = next((i for i in range(len(positives)) if _get_answer_spans(i, positives, max_len)),
-                            None)
+    #if not _get_answer_spans(positive_idx, positives, max_len):
+    #    # question may be too long, find the first positive with at least one valid span
+    #    positive_idx = next((i for i in range(len(positives)) if _get_answer_spans(i, positives, max_len)),
+    #                        None)
     return positive_idx
 
 
@@ -194,24 +195,24 @@ def _create_question_passages_tensors(positives: List[ReaderPassage], negatives:
         if positive_idx is None:
             return None
 
-        positive_a_spans = _get_answer_spans(positive_idx, positives, max_len)[0: max_n_answers]
+        positive_a_spans =None# _get_answer_spans(positive_idx, positives, max_len)[0: max_n_answers]
 
-        answer_starts = [span[0] for span in positive_a_spans]
-        answer_ends = [span[1] for span in positive_a_spans]
+        answer_starts = None#[span[0] for span in positive_a_spans]
+        answer_ends = None#[span[1] for span in positive_a_spans]
 
-        assert all(s < max_len for s in answer_starts)
-        assert all(e < max_len for e in answer_ends)
+        #assert all(s < max_len for s in answer_starts)
+        #assert all(e < max_len for e in answer_ends)
 
         positive_input_ids = _pad_to_len(positives[positive_idx].sequence_ids, pad_token_id, max_len)
 
-        answer_starts_tensor = torch.zeros((total_size, max_n_answers)).long()
-        answer_starts_tensor[0, 0:len(answer_starts)] = torch.tensor(answer_starts)
+        answer_starts_tensor = None#torch.zeros((total_size, max_n_answers)).long()
+        #answer_starts_tensor[0, 0:len(answer_starts)] = torch.tensor(answer_starts)
 
-        answer_ends_tensor = torch.zeros((total_size, max_n_answers)).long()
-        answer_ends_tensor[0, 0:len(answer_ends)] = torch.tensor(answer_ends)
+        answer_ends_tensor = None#torch.zeros((total_size, max_n_answers)).long()
+        #answer_ends_tensor[0, 0:len(answer_ends)] = torch.tensor(answer_ends)
 
-        answer_mask = torch.zeros((total_size, max_n_answers), dtype=torch.long)
-        answer_mask[0, 0:len(answer_starts)] = torch.tensor([1 for _ in range(len(answer_starts))])
+        answer_mask = None#torch.zeros((total_size, max_n_answers), dtype=torch.long)
+        #answer_mask[0, 0:len(answer_starts)] = torch.tensor([1 for _ in range(len(answer_starts))])
 
         positives_selected = [positive_input_ids]
 
