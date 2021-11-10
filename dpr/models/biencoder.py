@@ -109,16 +109,6 @@ class BiEncoder(nn.Module):
         ctx_attn_mask: T,
     ) -> Tuple[T, T]:
 
-        #from transformers import AutoTokenizer
-        #tok = AutoTokenizer.from_pretrained('roberta-large')
-        #str_ =  tok.decode(question_ids[0])
-        #assert str_.lower() == str_
-        #print(tok.decode(question_ids[1]))
-        #print(tok.decode(question_ids[2]))
-        #print(tok.decode(context_ids[0]))
-        #print(tok.decode(context_ids[1]))
-        #print(tok.decode(context_ids[2]))
-        #import pdb; pdb.set_trace()
         _q_seq, q_pooled_out, _q_hidden = self.get_representation(
             self.question_model,
             question_ids,

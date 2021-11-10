@@ -24,7 +24,7 @@ import torch
 from torch import Tensor as T
 from tqdm import tqdm
 
-from dpr.utils.data_utils import Tensorizer
+from DPR.dpr.utils.data_utils import Tensorizer
 
 logger = logging.getLogger()
 
@@ -333,10 +333,10 @@ def get_best_spans(
         predicted_answer = ''.join([r.upper() for r in predicted_answer if r.upper() in string.ascii_uppercase])
 
         # just turn score into the merged score already
-        score = score
-        #######score = score * relevance_score
-        temp_relevance_score = -999999
-        #
+        #score = score
+        #temp_relevance_score = -999999
+        score = score * relevance_score
+        temp_relevance_score = relevance_score
 
         best_spans.append(
             SpanPrediction(

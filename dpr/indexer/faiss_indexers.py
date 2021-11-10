@@ -102,6 +102,7 @@ class DenseFlatIndexer(DenseIndexer):
         #cpu_index = faiss.IndexFlatIP(vector_sz)
         #self.index = faiss.index_cpu_to_gpu(res, 0, cpu_index)
         self.index = faiss.IndexFlatIP(vector_sz)
+        self.all_vectors = None
 
     def _index_batch(self, data: List[Tuple[object, np.array]]):
         db_ids = [t[0] for t in data]
@@ -109,6 +110,10 @@ class DenseFlatIndexer(DenseIndexer):
         vectors = np.concatenate(vectors, axis=0)
         self._update_id_mapping(db_ids)
         self.index.add(vectors)
+        #if self.all_vectors is None:
+        #    self.all_vectors = vectors
+        #else:
+        #    self.all_vectors = np.concatenate((self.all_vectors, vectors), axis=0)
 
     def search_knn(
         self, query_vectors: np.array, top_docs: int
